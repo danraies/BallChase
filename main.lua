@@ -12,13 +12,14 @@ function love.load()
     INSTRUCTIONS_TEXT = "Press [F] to toggle fullscreen\nPress [1] to start 1-Player mode\nPress [2] to start 2-Player mode"
     INSTRUCTIONS_TEXT_GRAPHIC = love.graphics.newText(MAIN_FONT, {TEXT_COLOR, INSTRUCTIONS_TEXT})
     INSTRUCTIONS_TEXT_WIDTH, INSTRUCTIONS_TEXT_HEIGHT = INSTRUCTIONS_TEXT_GRAPHIC:getDimensions()
-    SPEED = 500
-    RADIUS = 10
     P1_COLOR = {0, 0, 1, 0.5}
     P2_COLOR = {1, 0, 0, 0.5}
+    P1_SCORE_FONT = love.graphics.newFont("Hack-Regular.ttf", 48)
+    P2_SCORE_FONT = love.graphics.newFont("Hack-Regular.ttf", 48)
     GOAL_COLOR = {0, 1, 0, 1}
     MINE_COLOR = {1, 1, 1, 1}
-    SCORE_PREFIX = "Score: "
+    PLAY_TIME = 30
+    LEAD_TIME = 3
 
     -- numberOfPlayers indicates the number of players, obviously, but it
     -- also doubles as a state indicator.  When numberOfPlayers==0 the game
@@ -35,6 +36,8 @@ function love.load()
     -- I decided to force the game to start in 800x450.
     love.window.setMode(INITIAL_SCREEN_WIDTH, INITIAL_SCREEN_HEIGHT)
     screenWidth, screenHeight, screenFlags = love.window.getMode()
+    radius = calculateRadius(screenWidth, screenHeight)
+    speed = calculateSpeed(screenWidth, screenHeight)
 end
 
 function love.keyreleased(key)
@@ -52,16 +55,15 @@ function love.keyreleased(key)
             -- totalTime is the total play time and remainingTime keeps track
             -- of the time until the game is over.  The first five seconds of
             -- the timer count down to the start of the game.
-            totalTime = 30
-            remainingTime = totalTime + 0
+            remainingTime = PLAY_TIME + LEAD_TIME
 
             -- There are several points to keep track of as the game is played:
             --  (*) G is the position of the goal.
             --  (*) p1 and p2 are the positions of the players.  p2 is not 
             --      stored if there is no player 2.
             --  (*) m1, m2, and m3 are the positions of the mines.
-            G_x, G_y = generateRandomSpot(screenWidth, screenHeight, RADIUS)
-            p1_x, p1_y = generateRandomSpot(screenWidth, screenHeight, RADIUS)
+            G_x, G_y = generateRandomSpot(screenWidth, screenHeight, radius)
+            p1_x, p1_y = generateRandomSpot(screenWidth, screenHeight, radius)
             if numberOfPlayers == 2 then
                 p1_x = math.floor(0.2 * screenWidth)
                 p1_y = screenHeight / 2
@@ -69,17 +71,19 @@ function love.keyreleased(key)
                 p2_y = screenHeight / 2
                 G_x = screenWidth / 2
             end
-            m1_x, m1_y = generateRandomSpot(screenWidth, screenHeight, RADIUS)
-            m2_x, m2_y = generateRandomSpot(screenWidth, screenHeight, RADIUS)
-            m3_x, m3_y = generateRandomSpot(screenWidth, screenHeight, RADIUS)
+            m1_x, m1_y = generateRandomSpot(screenWidth, screenHeight, radius)
+            m2_x, m2_y = generateRandomSpot(screenWidth, screenHeight, radius)
+            m3_x, m3_y = generateRandomSpot(screenWidth, screenHeight, radius)
 
             -- These variables hold each player's score.
-            p1_score, p1_scoreText = updateScore(0, SCORE_PREFIX)
+            p1_score = 0
+            p1_scoreGraphic = love.graphics.newText(P1_SCORE_FONT, p1_score)
             if numberOfPlayers == 1 then
                 highScore = 0
             end
             if numberOfPlayers == 2 then
-                p2_score, p2_scoreText = updateScore(0, SCORE_PREFIX)
+                p2_score = 0
+                p2_scoreGraphic = love.graphics.newText(P2_SCORE_FONT, p2_score)
             end
         end
         if key == "f" then
@@ -90,6 +94,8 @@ function love.keyreleased(key)
                 love.window.setMode(displayWidth, displayHeight, {fullscreen = true})
             end
             screenWidth, screenHeight, screenFlags = love.window.getMode()
+            radius = calculateRadius(screenWidth, screenHeight)
+            speed = calculateSpeed(screenWidth, screenHeight)
         end
     else
         if key == "backspace" then
@@ -105,107 +111,101 @@ function love.update(dt)
         if remainingTime > totalTime then
 
         elseif remainingTime > 0 then
+            -- Player Movement
             if love.keyboard.isDown("w") then
-                p1_y = math.max(0, p1_y - SPEED * dt)
+                p1_y = math.max(0, p1_y - speed * dt)
             end
             if love.keyboard.isDown("s") then
-                p1_y = math.min(screenHeight, p1_y + SPEED * dt)
+                p1_y = math.min(screenHeight, p1_y + speed * dt)
             end
             if love.keyboard.isDown("d") then
-                p1_x = math.min(screenWidth, p1_x + SPEED * dt)
+                p1_x = math.min(screenWidth, p1_x + speed * dt)
             end
             if love.keyboard.isDown("a") then
-                p1_x = math.max(0, p1_x - SPEED * dt)
+                p1_x = math.max(0, p1_x - speed * dt)
             end
             if numberOfPlayers == 2 then
                 if love.keyboard.isDown("up") then
-                    p2_y = math.max(0, p2_y - SPEED * dt)
+                    p2_y = math.max(0, p2_y - speed * dt)
                 end
                 if love.keyboard.isDown("down") then
-                    p2_y = math.min(screenHeight, p2_y + SPEED * dt)
+                    p2_y = math.min(screenHeight, p2_y + speed * dt)
                 end
                 if love.keyboard.isDown("right") then
-                    p2_x = math.min(screenWidth, p2_x + SPEED * dt)
+                    p2_x = math.min(screenWidth, p2_x + speed * dt)
                 end
                 if love.keyboard.isDown("left") then
-                    p2_x = math.max(0, p2_x - SPEED * dt)
+                    p2_x = math.max(0, p2_x - speed * dt)
                 end
             end
 
+            -- Detecting for hits with the goals.
+            -- Note that this is done carefully to ensure that neither player has an advantage.
+            -- It should be theoretically possible for both players to score a point if they hit
+            -- the goal at the EXACT same time.
             local goalHit = false
-            if doTheyIntersect(p1_x, p1_y, G_x, G_y, RADIUS) then
-                p1_score, p1_scoreText = updateScore(p1_score + 1, SCORE_PREFIX)
+            if doTheyIntersect(p1_x, p1_y, G_x, G_y, radius) then
+                p1_score = p1_score + 1
                 goalHit = true
             end
             if numberOfPlayers == 2 then
-                if doTheyIntersect(p2_x, p2_y, G_x, G_y, RADIUS) then
-                    p2_score, p2_scoreText = updateScore(p2_score + 1, SCORE_PREFIX)
+                if doTheyIntersect(p2_x, p2_y, G_x, G_y, radius) then
+                    p2_score = p2_score + 1
                     goalHit = true
                 end
             end
             if goalHit then
-                G_x, G_y = generateRandomSpot(screenWidth, screenHeight, RADIUS)
+                G_x, G_y = generateRandomSpot(screenWidth, screenHeight, radius)
+            end
+
+            -- Detecting for hits with the mines.
+            local mineHit1 = false
+            local mineHit2 = false
+            local mineHit3 = false
+            if doTheyIntersect(p1_x, p1_y, m1_x, m1_y, radius) then
+                p1_score = p1_score - 1
+                mineHit1 = true
+            end
+            if doTheyIntersect(p1_x, p1_y, m2_x, m2_y, radius) then
+                p1_score = p1_score - 1
+                mineHit2 = true
+            end
+            if doTheyIntersect(p1_x, p1_y, m3_x, m3_y , radius) then
+                p1_score = p1_score - 1
+                mineHit3 = true
+            end
+            if numberOfPlayers == 2 then
+                if doTheyIntersect(p2_x, p2_y, m1_x, m1_y, radius) then
+                    p2_score = p2_score - 1
+                    mineHit1 = true
+                end
+                if doTheyIntersect(p2_x, p2_y, m2_x, m2_y, radius) then
+                    p2_score = p2_score - 1
+                    mineHit2 = true
+                end
+                if doTheyIntersect(p2_x, p2_y, m3_x, m3_y, radius) then
+                    p2_score = p2_score - 1
+                    mineHit3 = true
+                end
+            end
+            if mineHit1 then
+                m1_x, m1_y = generateRandomSpot(screenWidth, screenHeight, radius)
+            end
+            if mineHit2 then
+                m2_x, m2_y = generateRandomSpot(screenWidth, screenHeight, radius)
+            end
+            if mineHit3 then
+                m3_x, m3_y = generateRandomSpot(screenWidth, screenHeight, radius)
+            end
+
+            p1_scoreGraphic:set(p1_score)
+            if numberOfPlayers == 2 then
+                p2_scoreGraphic:set(p2_score)
             end
         else
 
         end
     end
-    -- if remainingTime > 0 then
-    --     remainingTime = remainingTime - dt
-    -- else
-    --     remainingTime = 0
-    -- end
-
-    -- keyspressed = ""
-    -- if remainingTime > 0 then
-    --     if love.keyboard.isDown("a") then
-    --         x = x - speed * dt
-    --         keyspressed = keyspressed .. "a"
-    --     end
-    --     if love.keyboard.isDown("d") then
-    --         x = x + speed * dt
-    --         keyspressed = keyspressed .. "d"
-    --     end
-    --     if love.keyboard.isDown("w") then
-    --         y = y - speed * dt
-    --         keyspressed = keyspressed .. "w"
-    --     end
-    --     if love.keyboard.isDown("s") then
-    --         y = y + speed * dt
-    --         keyspressed = keyspressed .. "s"
-    --     end
-    --     if x < 0 then
-    --         x = 0
-    --     end
-    --     if y < 0 then
-    --         y = 0
-    --     end
-    --     if x > width then
-    --         x = width
-    --     end
-    --     if y > height then
-    --         y = height
-    --     end
-
-    --     local dist = math.sqrt((GoalX - x)*(GoalX - x) + (GoalY - y)*(GoalY - y))
-    --     if dist < radius * 2 then
-    --         score = score + 1
-    --         GoalX = math.random(0, width)
-    --         GoalY = math.random(0, height)
-    --     end
-    -- end
-
-    -- if remainingTime > 0 then
-    --     timeText = "Time Remaining: " .. math.floor(remainingTime + 1)
-    --     scoreText = "Score: " .. score
-    -- else
-    --     timeText = "Time Remaining: 0"
-    --     scoreText = "Final Score: " .. score
-    --     if score > highScore then
-    --         highScore = score
-    --     end
-    --     highScoreText = "High Score: " .. highScore
-    -- end
 end
 
 function love.draw()
@@ -214,28 +214,27 @@ function love.draw()
         love.graphics.draw(TITLE_TEXT_GRAPHIC, screenWidth / 2 - TITLE_TEXT_WIDTH / 2, screenHeight / 3 - TITLE_TEXT_WIDTH / 2)
         love.graphics.draw(INSTRUCTIONS_TEXT_GRAPHIC, screenWidth / 2 - INSTRUCTIONS_TEXT_WIDTH / 2, 2 * screenHeight / 3 - INSTRUCTIONS_TEXT_WIDTH / 2)
     else
+        love.graphics.setColor(MINE_COLOR)
+        love.graphics.circle("line", m1_x, m1_y, radius)
+        love.graphics.circle("line", m2_x, m2_y, radius)
+        love.graphics.circle("line", m3_x, m3_y, radius)
+        love.graphics.line(m1_x - radius / 2, m1_y - radius / 2, m1_x + radius / 2, m1_y + radius / 2)
+        love.graphics.line(m1_x - radius / 2, m1_y + radius / 2, m1_x + radius / 2, m1_y - radius / 2)
+        love.graphics.line(m2_x - radius / 2, m2_y - radius / 2, m2_x + radius / 2, m2_y + radius / 2)
+        love.graphics.line(m2_x - radius / 2, m2_y + radius / 2, m2_x + radius / 2, m2_y - radius / 2)
+        love.graphics.line(m3_x - radius / 2, m3_y - radius / 2, m3_x + radius / 2, m3_y + radius / 2)
+        love.graphics.line(m3_x - radius / 2, m3_y + radius / 2, m3_x + radius / 2, m3_y - radius / 2)
         love.graphics.setColor(GOAL_COLOR)
-        love.graphics.circle("fill", G_x, G_y, RADIUS)
+        love.graphics.circle("fill", G_x, G_y, radius)
         love.graphics.setColor(P1_COLOR)
-        love.graphics.circle("fill", p1_x, p1_y, RADIUS)
+        love.graphics.circle("fill", p1_x, p1_y, radius)
+        love.graphics.draw(p1_scoreGraphic, 0, 0)
         if numberOfPlayers == 2 then
             love.graphics.setColor(P2_COLOR)
-            love.graphics.circle("fill", p2_x, p2_y, RADIUS)
+            love.graphics.circle("fill", p2_x, p2_y, radius)
+            love.graphics.draw(p2_scoreGraphic, screenWidth - p2_scoreGraphic:getWidth(), 0)
         end
     end
-    -- if remainingTime > 0 then
-    --     love.graphics.setColor(0, 1, 0, 1)
-    --     love.graphics.circle("fill", GoalX, GoalY, radius)
-    --     love.graphics.setColor(1, 1, 1, 1)
-    --     love.graphics.circle("fill", x, y, radius)
-    --     -- love.graphics.printf(keyspressed, 3, 3, 100, "left")
-    --     love.graphics.printf(scoreText, width / 2 - 100, height / 2 - 20, 200, "center")
-    --     love.graphics.printf(timeText, width / 2 - 100, height / 2, 200, "center")
-    -- else
-    --     love.graphics.printf(scoreText, width / 2 - 100, height / 2 - 20, 200, "center")
-    --     love.graphics.printf(highScoreText, width / 2 - 100, height / 2, 200, "center")
-    --     love.graphics.printf("Press TAB to start over.", width / 2 - 100, height / 2 + 20, 200, "center")
-    -- end
 end
 
 function setWindowVariables(w, h)
@@ -257,7 +256,10 @@ function doTheyIntersect(x1, y1, x2, y2, r)
     return d < 2 * r
 end
 
-function updateScore(newScore, textPrefix)
-    local text = textPrefix .. newScore
-    return newScore, textPrefix
+function calculateRadius(w, h)
+    return math.min(w, h) / 40
+end
+
+function calculateSpeed(w, h)
+    return math.min(w, h) * 10 / 9
 end
