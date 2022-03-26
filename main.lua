@@ -7,7 +7,7 @@ function love.load()
 
     -- Set up the static graphics for the title and instructions.
     TITLE_FONT = love.graphics.newFont("Hack-Regular.ttf", 24)
-    TITLE_TEXT = "Ball Chase"
+    TITLE_TEXT = "BallChase"
     TITLE_TEXT_GRAPHIC = love.graphics.newText(TITLE_FONT, {TEXT_COLOR, TITLE_TEXT})
     TITLE_TEXT_WIDTH, TITLE_TEXT_HEIGHT = TITLE_TEXT_GRAPHIC:getDimensions()
     INSTRUCTIONS_TEXT = "Press [F] to toggle fullscreen.\nPress [1] to start 1-Player mode.\nPress [2] to start 2-Player mode."
@@ -301,16 +301,13 @@ function love.draw()
 
         -- Here we draw the "Time Remaining" indicator.
         -- This is always displayed, even at the results screen.
+        -- During the countdown it should display a time remaining of PLAY_TIME.
         love.graphics.setColor(TEXT_COLOR)
-        local playTimeLeft = remainingTime
-        if playTimeLeft > PLAY_TIME - 0.0001 then
-            -- I want it display "Time Remaining: 30" when playTimeLeft > PLAY_TIME instead
-            -- of "Time Remaining: 31"
-            playTimeLeft = PLAY_TIME - 0.0001
-        elseif playTimeLeft < 0 then
-            playTimeLeft = -1
+        local playTimeLeft = math.max(0, remainingTime)
+        if playTimeLeft > PLAY_TIME then
+            playTimeLeft = PLAY_TIME
         end
-        local timerGraphic = love.graphics.newText(MAIN_FONT, "Time Remaining: " .. (math.floor(playTimeLeft) + 1))
+        local timerGraphic = love.graphics.newText(MAIN_FONT, "Time Remaining: " .. math.ceil(playTimeLeft))
         love.graphics.draw(timerGraphic, (screenWidth - timerGraphic:getWidth()) / 2, 0)
 
         -- Here we draw the results screen.  This is technically still in the
