@@ -27,6 +27,9 @@ function love.load()
     GOAL_COLOR = {0, 1, 0, 1}
     MINE_COLOR = {1, 1, 1, 1}
 
+    -- A variable that controls the speed of the mines relative to the player(s).
+    MINE_SPEED_QUOTIENT = 0.3
+
     -- These variables control the length of the game.  PLAY_TIME is the total
     -- amount of time that the game is played and LEAD_TIME is the length of the
     -- countdown timer at the beginning.
@@ -116,6 +119,9 @@ function love.keyreleased(key)
             m1_x, m1_y = generateRandomSpot(screenWidth, screenHeight, radius)
             m2_x, m2_y = generateRandomSpot(screenWidth, screenHeight, radius)
             m3_x, m3_y = generateRandomSpot(screenWidth, screenHeight, radius)
+            m1_dx, m1_dy = generateRandomDirection()
+            m2_dx, m2_dy = generateRandomDirection()
+            m3_dx, m3_dy = generateRandomDirection()
 
             -- These variables hold each player's score.
             p1_score = 0
@@ -170,6 +176,63 @@ function love.update(dt)
                 end
             end
 
+            -- Mine Movement
+            m1_x = m1_x + m1_dx * speed * MINE_SPEED_QUOTIENT * dt
+            m1_y = m1_y + m1_dy * speed * MINE_SPEED_QUOTIENT * dt
+            m2_x = m2_x + m2_dx * speed * MINE_SPEED_QUOTIENT * dt
+            m2_y = m2_y + m2_dy * speed * MINE_SPEED_QUOTIENT * dt
+            m3_x = m3_x + m3_dx * speed * MINE_SPEED_QUOTIENT * dt
+            m3_y = m3_y + m3_dy * speed * MINE_SPEED_QUOTIENT * dt
+            if m1_x < 0 then
+                m1_x = 0
+                m1_dx = -1 * m1_dx
+            end
+            if m1_x > screenWidth then
+                m1_x = screenWidth
+                m1_dx = -1 * m1_dx
+            end
+            if m1_y < 0 then
+                m1_y = 0
+                m1_dy = -1 * m1_dy
+            end
+            if m1_y > screenHeight then
+                m1_y = screenHeight
+                m1_dy = -1 * m1_dy
+            end
+            if m2_x < 0 then
+                m2_x = 0
+                m2_dx = -1 * m2_dx
+            end
+            if m2_x > screenWidth then
+                m2_x = screenWidth
+                m2_dx = -1 * m2_dx
+            end
+            if m2_y < 0 then
+                m2_y = 0
+                m2_dy = -1 * m2_dy
+            end
+            if m2_y > screenHeight then
+                m2_y = screenHeight
+                m2_dy = -1 * m2_dy
+            end
+            if m3_x < 0 then
+                m3_x = 0
+                m3_dx = -1 * m3_dx
+            end
+            if m3_x > screenWidth then
+                m3_x = screenWidth
+                m3_dx = -1 * m3_dx
+            end
+            if m3_y < 0 then
+                m3_y = 0
+                m3_dy = -1 * m3_dy
+            end
+            if m3_y > screenHeight then
+                m3_y = screenHeight
+                m3_dy = -1 * m3_dy
+            end
+
+
             -- Detecting for hits with the goals.
             -- Note that this is done carefully to ensure that neither player has an advantage.
             -- It should be theoretically possible for both players to score a point if they hit
@@ -221,12 +284,15 @@ function love.update(dt)
             end
             if mineHit1 then
                 m1_x, m1_y = generateRandomSpot(screenWidth, screenHeight, radius)
+                m1_dx, m1_dy = generateRandomDirection()
             end
             if mineHit2 then
                 m2_x, m2_y = generateRandomSpot(screenWidth, screenHeight, radius)
+                m2_dx, m2_dy = generateRandomDirection()
             end
             if mineHit3 then
                 m3_x, m3_y = generateRandomSpot(screenWidth, screenHeight, radius)
+                m3_dx, m3_dy = generateRandomDirection()
             end
 
             -- Score graphics are updated.
@@ -237,11 +303,6 @@ function love.update(dt)
         elseif (remainingTime <= 0) and (numberOfPlayers == 1) and (p1_score > highScore) then
             highScore = p1_score
         end
-        -- elseif (remainingTime <= 0) and (numberOfPlayers == 1) then
-        --     if p1_score > highScore then
-        --         highScore = p1_score
-        --     end
-        -- end
     end
 end
 
@@ -348,6 +409,13 @@ end
 function generateRandomSpot(w, h, r)
     local x = math.random(r, w - r)
     local y = math.random(r, h - r)
+    return x, y
+end
+
+function generateRandomDirection()
+    local theta = math.random() * 2 * math.pi
+    local x = math.sin(theta)
+    local y = math.cos(theta)
     return x, y
 end
 
